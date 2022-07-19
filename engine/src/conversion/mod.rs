@@ -125,9 +125,6 @@ impl<'a> BridgeConverter<'a> {
                 Self::dump_apis("parsing", &apis);
                 // Inside parse_results, we now have a list of APIs.
                 // We now enter various analysis phases.
-                // Add accessors for class/struct fields. These are necessary to access fields of non-POD types
-                let apis = add_field_accessors(apis);
-                Self::dump_apis("adding field accessors", &apis);
                 // First, convert any typedefs.
                 // "Convert" means replacing bindgen-style type targets
                 // (e.g. root::std::unique_ptr) with cxx-style targets (e.g. UniquePtr).
@@ -142,6 +139,9 @@ impl<'a> BridgeConverter<'a> {
                 let analyzed_apis = analyze_pod_apis(apis, self.config, &parse_callback_results)
                     .map_err(ConvertError::Cpp)?;
                 Self::dump_apis("pod analysis", &analyzed_apis);
+                // Add accessors for class/struct fields. These are necessary to access fields of non-POD types
+                let analyzed_apis = add_field_accessors(analyzed_apis);
+                Self::dump_apis("adding field accessors", &analyzed_apis);
                 let analyzed_apis = replace_hopeless_typedef_targets(self.config, analyzed_apis);
                 let analyzed_apis = add_casts(analyzed_apis);
                 let analyzed_apis = create_alloc_and_frees(analyzed_apis);
