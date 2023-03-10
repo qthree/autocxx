@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::HashSet;
+use indexmap::IndexSet;
 
 use syn::{parse_quote, Field, Visibility};
 
@@ -29,8 +29,8 @@ use super::{
 };
 
 pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
-    let existing_api: HashSet<QualifiedName> = apis.iter().map(|api| api.name().clone()).collect();
-    let pod_safe_types: HashSet<QualifiedName> = build_pod_safe_type_set(&apis);
+    let existing_api: IndexSet<QualifiedName> = apis.iter().map(|api| api.name().clone()).collect();
+    let pod_safe_types: IndexSet<QualifiedName> = build_pod_safe_type_set(&apis);
 
     let mut results = ApiVec::new();
     convert_apis(
@@ -115,9 +115,9 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
 
 fn should_generate_accessor(
     field: &Field,
-    existing_api: &HashSet<QualifiedName>,
+    existing_api: &IndexSet<QualifiedName>,
     accessor_name: &QualifiedName,
-    pod_safe_types: &HashSet<QualifiedName>,
+    pod_safe_types: &IndexSet<QualifiedName>,
 ) -> bool {
     // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
     if existing_api.contains(accessor_name) {
@@ -162,7 +162,7 @@ fn get_accessor_name(struct_name: &QualifiedName, field_name: &str) -> Qualified
 }
 
 // TODO: relocate FnAnalyzer::build_pod_safe_type_set to deduplicate
-fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> HashSet<QualifiedName> {
+fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> IndexSet<QualifiedName> {
     apis.iter()
         .filter_map(|api| match api {
             Api::Struct {
