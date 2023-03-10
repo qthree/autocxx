@@ -120,7 +120,7 @@ fn should_generate_accessor(
     pod_safe_types: &HashSet<QualifiedName>,
 ) -> bool {
     // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
-    if existing_api.contains(&accessor_name) {
+    if existing_api.contains(accessor_name) {
         return false;
     }
 
@@ -152,7 +152,7 @@ fn should_generate_accessor(
         }
     }
 
-    return true;
+    true
 }
 
 fn get_accessor_name(struct_name: &QualifiedName, field_name: &str) -> QualifiedName {
