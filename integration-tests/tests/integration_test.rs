@@ -12610,6 +12610,9 @@ fn test_non_pod_field_access() {
         let mut foo = ffi::Foo::new(3).within_unique_ptr();
         let i = foo.pin_mut().get_i();
         assert_eq!(i, 3);
+        foo.pin_mut().set_i(4);
+        let i = foo.pin_mut().get_i();
+        assert_eq!(i, 4);
     };
 
     run_test("", hdr, rs, &["Foo"], &[]);

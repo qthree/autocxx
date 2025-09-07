@@ -242,7 +242,8 @@ pub(crate) enum CppFunctionBody {
     Destructor(Namespace, Ident),
     AllocUninitialized(QualifiedName),
     FreeUninitialized(QualifiedName),
-    ReturnFieldAccess(Ident),
+    GetField(Ident),
+    SetField(Ident),
 }
 
 #[derive(Clone, Debug)]

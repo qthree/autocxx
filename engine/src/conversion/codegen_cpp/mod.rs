@@ -577,8 +577,11 @@ impl<'a> CppCodeGenerator<'a> {
                 "".to_string(),
                 true,
             ),
-            CppFunctionBody::ReturnFieldAccess(field_name) => {
+            CppFunctionBody::GetField(field_name) => {
                 (format!("arg0.{field_name}"), "".to_string(), false)
+            }
+            CppFunctionBody::SetField(field_name) => {
+                (format!("arg0.{field_name} = arg1"), "".to_string(), false)
             }
         };
         if let Some(ret) = &details.return_conversion {
