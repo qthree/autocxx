@@ -25,3 +25,4 @@ mod type_converter;
 
 pub(crate) use name_check::check_names;
 pub(crate) use replace_hopeless_typedef_targets::replace_hopeless_typedef_targets;
+pub(crate) mod struct_accessors;
