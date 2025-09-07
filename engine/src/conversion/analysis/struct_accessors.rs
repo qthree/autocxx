@@ -156,7 +156,7 @@ fn should_generate_accessor(
 }
 
 fn get_accessor_name(struct_name: &QualifiedName, field_name: &str) -> QualifiedName {
-    let accessor_name = format!("{}_get_{}", struct_name.get_final_item(), field_name);
+    let accessor_name = format!("get_{}", field_name);
 
     QualifiedName::new(struct_name.get_namespace(), make_ident(accessor_name))
 }
