@@ -12,11 +12,12 @@ use syn::{parse_quote, punctuated::Punctuated, token::Comma, Field, Visibility};
 
 use crate::{
     conversion::{
-        api::{
-            Api, ApiName, FuncToConvert, Provenance, StructDetails, TypeKind,
-        },
+        analysis::type_converter,
+        api::{self, Api, ApiName, FuncToConvert, Provenance, StructDetails},
         apivec::ApiVec,
-        error_reporter::convert_apis, type_helpers::type_is_reference,
+        error_reporter::convert_apis,
+        type_helpers::type_is_reference,
+        CppOriginalName,
     },
     known_types,
     minisyn::FnArg,
@@ -37,7 +38,7 @@ struct StructAccessGenerator {
 #[derive(Clone, Copy)]
 enum AccessType {
     Get,
-    Set
+    Set,
 }
 
 impl StructAccessGenerator {
@@ -47,16 +48,13 @@ impl StructAccessGenerator {
     fn generate(&mut self, struct_name: &ApiName, field: &Field, access_type: AccessType) {
         let field_name = field.ident.as_ref().unwrap().to_string();
         let accessor_name = get_accessor_name(&struct_name.name, &field_name, access_type);
-        let ident = accessor_name.get_final_ident();
+        let ident = accessor_name.name.get_final_ident();
 
-        if !should_generate_accessor(
-            field,
-            &self.existing_api,
-            &accessor_name,
-            &self.pod_safe_types,
-        ) {
+        // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
+        if self.existing_api.contains(&accessor_name.name) {
             return;
         }
+        self.existing_api.insert(accessor_name.name.clone());
 
         let field_name_ident = make_ident(field_name);
 
@@ -74,21 +72,20 @@ impl StructAccessGenerator {
             AccessType::Get => parse_quote! {
                 this: *const #struct_type
             },
-            AccessType::Set =>  parse_quote! {
+            AccessType::Set => parse_quote! {
                 this: *mut #struct_type, value: #field_type
             },
         };
 
         let output = match access_type {
-            AccessType::Get => parse_quote!{
+            AccessType::Get => parse_quote! {
                 -> #field_type
             },
-            AccessType::Set =>  parse_quote! {
-            },
+            AccessType::Set => parse_quote! {},
         };
 
         self.accessors.push(Api::Function {
-            name: ApiName::new_from_qualified_name(accessor_name),
+            name: accessor_name,
             fun: Box::new(FuncToConvert {
                 provenance: Provenance::SynthesizedOther,
                 ident,
@@ -98,7 +95,7 @@ impl StructAccessGenerator {
                 output,
                 vis: parse_quote! { pub },
                 virtualness: None,
-                cpp_vis: crate::conversion::api::CppVisibility::Public,
+                cpp_vis: api::CppVisibility::Public,
                 special_member: None,
                 original_name: None,
                 self_ty: None,
@@ -128,8 +125,10 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
             match &details.item.fields {
                 syn::Fields::Named(named) => {
                     for field in named.named.iter() {
-                        gen.generate(&struct_name, field, AccessType::Get);
-                        gen.generate(&struct_name, field, AccessType::Set);
+                        if should_generate_accessor(field, &analysis, &gen.pod_safe_types) {
+                            gen.generate(&struct_name, field, AccessType::Get);
+                            gen.generate(&struct_name, field, AccessType::Set);
+                        }
                     }
                 }
                 syn::Fields::Unnamed(_) => {}
@@ -137,13 +136,13 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
             };
 
             // Generate the accessors (if any) + the struct itself
-            Ok(Box::new(gen.take_accessors().into_iter().chain(std::iter::once(
-                Api::Struct {
+            Ok(Box::new(gen.take_accessors().into_iter().chain(
+                std::iter::once(Api::Struct {
                     name: struct_name,
                     details,
                     analysis,
-                },
-            ))))
+                }),
+            )))
         },
         Api::enum_unchanged,
         Api::typedef_unchanged,
@@ -154,14 +153,9 @@ pub(crate) fn add_field_accessors(apis: ApiVec<PodPhase>) -> ApiVec<PodPhase> {
 
 fn should_generate_accessor(
     field: &Field,
-    existing_api: &IndexSet<QualifiedName>,
-    accessor_name: &QualifiedName,
+    analysis: &PodAnalysis,
     pod_safe_types: &IndexSet<QualifiedName>,
 ) -> bool {
-    // Don't generate accessors that would conflict with existing api (i.e., if a method with the name we would generate already exists)
-    if existing_api.contains(accessor_name) {
-        return false;
-    }
 
     // Don't generate accessors for non-public fields
     if !matches!(field.vis, Visibility::Public(_)) {
@@ -179,10 +173,28 @@ fn should_generate_accessor(
         return false;
     }
 
+    // Don't generate accessors if POD analysis has no field info
+    let Some(analysis) = analysis.field_info.iter().find(|info| {
+        info.ident
+            .as_ref()
+            .is_some_and(|ident| ident == &field_name)
+    }) else {
+        return false;
+    };
+
+    // Don't generate accessors if POD analysis for opaque data and non-regular types
+    if analysis.bindgen_opaque_data
+        || !matches!(analysis.type_kind, type_converter::TypeKind::Regular)
+    {
+        return false;
+    }
+
     // Don't generate accessors for fields which are non-POD types (this restriction may be lifted in the future)
-    match &field.ty {
+    match &analysis.ty {
         syn::Type::Path(path) => {
-            if !pod_safe_types.contains(&QualifiedName::from_type_path(path)) {
+            quote::quote! {#path}.to_string();
+            let name = QualifiedName::from_type_path(path);
+            if !pod_safe_types.contains(&name) {
                 return false;
             }
         }
@@ -194,14 +206,24 @@ fn should_generate_accessor(
     true
 }
 
-fn get_accessor_name(struct_name: &QualifiedName, field_name: &str, access_type: AccessType) -> QualifiedName {
+fn get_accessor_name(
+    struct_name: &QualifiedName,
+    field_name: &str,
+    access_type: AccessType,
+) -> ApiName {
     let prefix = match access_type {
         AccessType::Get => "get",
         AccessType::Set => "set",
     };
-    let accessor_name = format!("{prefix}_{}", field_name);
+    let user_name = format!("{prefix}_{}", field_name);
+    let binding_name = format!("{}_{prefix}_{}", struct_name.get_final_item(), field_name);
 
-    QualifiedName::new(struct_name.get_namespace(), make_ident(accessor_name))
+    // WTF, why is this reversed?!
+    ApiName::new_with_cpp_name(
+        struct_name.get_namespace(),
+        make_ident(binding_name),
+        Some(CppOriginalName::from_rust_name(user_name)),
+    )
 }
 
 // TODO: relocate FnAnalyzer::build_pod_safe_type_set to deduplicate
@@ -211,7 +233,7 @@ fn build_pod_safe_type_set(apis: &ApiVec<PodPhase>) -> IndexSet<QualifiedName> {
             Api::Struct {
                 analysis:
                     PodAnalysis {
-                        kind: TypeKind::Pod,
+                        kind: api::TypeKind::Pod,
                         ..
                     },
                 ..

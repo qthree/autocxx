@@ -13,7 +13,7 @@ use indexmap::set::IndexSet as HashSet;
 
 use autocxx_parser::IncludeCppConfig;
 use byvalue_checker::ByValueChecker;
-use syn::{ItemStruct, Type, Visibility};
+use syn::{Ident, ItemStruct, Type, Visibility};
 
 use crate::{
     conversion::{
@@ -34,6 +34,7 @@ use super::tdef::{TypedefAnalysis, TypedefPhase};
 #[derive(std::fmt::Debug)]
 
 pub(crate) struct FieldInfo {
+    pub(crate) ident: Option<Ident>,
     pub(crate) ty: Type,
     pub(crate) type_kind: type_converter::TypeKind,
     pub(crate) bindgen_opaque_data: bool,
@@ -254,6 +255,7 @@ fn get_struct_field_types(
                         field_definition_deps.insert(QualifiedName::from_type_path(typ));
                     }
                     field_info.push(FieldInfo {
+                        ident: f.ident.clone(),
                         ty: r.ty,
                         type_kind: r.kind,
                         bindgen_opaque_data: f
