@@ -105,16 +105,59 @@ pub use reference_wrapper::{
 #[macro_export]
 macro_rules! include_cpp {
     (
-        $(#$include:ident $lit:literal)*
-        $($mac:ident!($($arg:tt)*))*
+        $($tail:tt)*
+        //$($mac:ident!($($arg:tt)*))*
     ) => {
-        $($crate::$include!{__docs})*
-        $($crate::$mac!{__docs})*
+        $crate::include_cpp_tail!{$($tail)*}
         $crate::include_cpp_impl! {
-            $(#include $lit)*
-            $($mac!($($arg)*))*
+            $($tail)*
         }
+    }
+}
+
+#[macro_export]
+#[doc(hidden)]
+macro_rules! include_cpp_tail {
+    (
+        $($mac:ident!($($arg:tt)*))+
+        $(# $($tail:tt)+)?
+    ) => {
+        $($crate::$mac!{__docs})+
+        $($crate::include_cpp_tail!{# $($tail)+})?
     };
+    (
+        #include $lit:literal
+        $($tail:tt)*
+    ) => {
+        $crate::include!{__docs}
+        $crate::include_cpp_tail!{$($tail)*}
+    };
+    (
+        #ifdef $condition:ident
+        $($tail:tt)*
+    ) => {
+        $crate::include_cpp_tail!{$($tail)*}
+    };
+    (
+        #ifndef $condition:ident
+        $($tail:tt)*
+    ) => {
+        $crate::include_cpp_tail!{$($tail)*}
+    };
+    (
+        #endif
+        $($tail:tt)*
+    ) => {
+        $crate::include_cpp_tail!{$($tail)*}
+    };
+    (
+    ) => {};
+    /*(
+        #tail; $docs:ident; # $dir:ident $($condition:ident)?
+        $($tail:tt)*
+    ) => {
+        $crate::include_cpp_tail!(#tail; $docs; $($tail)*)
+    }*/
 }
 
 /// Include a C++ header. A directive to be included inside

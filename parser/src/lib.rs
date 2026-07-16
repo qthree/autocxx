@@ -14,10 +14,12 @@ pub mod file_locations;
 mod multi_bindings;
 mod path;
 mod subclass_attrs;
+mod defines;
 
 pub use config::{
     AllowlistEntry, ExternCppType, IncludeCppConfig, RustFun, Subclass, UnsafePolicy,
 };
+pub use defines::Defines;
 use file_locations::FileLocationStrategy;
 pub use multi_bindings::{MultiBindings, MultiBindingsErr};
 pub use path::RustPath;

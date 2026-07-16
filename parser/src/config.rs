@@ -25,6 +25,7 @@ use syn::{
 use syn::{Ident, Result as ParseResult};
 use thiserror::Error;
 
+use crate::defines::Defines;
 use crate::{directives::get_directives, RustPath};
 
 use quote::quote;
@@ -233,7 +234,14 @@ pub struct IncludeCppConfig {
 
 impl Parse for IncludeCppConfig {
     fn parse(input: ParseStream) -> ParseResult<Self> {
+        Defines::with_current_defines(|defines| Self::parse_with_defines(input, defines))
+    }
+}
+
+impl IncludeCppConfig {
+    fn parse_with_defines(input: ParseStream, defines: &Defines) -> ParseResult<Self> {
         let mut config = IncludeCppConfig::default();
+        let mut ifdef = None;
 
         while !input.is_empty() {
             let has_hexathorpe = input.parse::<Option<syn::token::Pound>>()?.is_some();
@@ -248,12 +256,44 @@ impl Parse for IncludeCppConfig {
             };
             let all_possible = possible_directives.keys().join(", ");
             let ident_str = ident.to_string();
+            let check_nested = || {
+                if ifdef.is_some() {
+                    Err(syn::Error::new(
+                        ident.span(),
+                        format!("nested conditional inclusion"),
+                    ))
+                } else {
+                    Ok(())
+                }
+            };
             match possible_directives.get(&ident_str) {
+                None if ident_str == "ifdef" => {
+                    let define = input.parse::<syn::Ident>()?;
+                    check_nested()?;
+                    ifdef = Some(defines.contains(&define));
+                }
+                None if ident_str == "ifndef" => {
+                    let define = input.parse::<syn::Ident>()?;
+                    check_nested()?;
+                    ifdef = Some(!defines.contains(&define));
+                }
+                None if ident_str == "endif" => {
+                    if ifdef.take().is_none() {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            format!("unexpected endif"),
+                        ));
+                    }
+                }
                 None => {
                     return Err(syn::Error::new(
                         ident.span(),
                         format!("expected {all_possible}"),
                     ));
+                }
+                Some(directive) if ifdef.is_some_and(std::ops::Not::not) => {
+                    // ignore directives inside disabled ifdef
+                    directive.parse(to_parse, &mut Default::default(), &ident.span())?;
                 }
                 Some(directive) => directive.parse(to_parse, &mut config, &ident.span())?,
             }

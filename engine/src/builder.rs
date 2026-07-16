@@ -7,6 +7,7 @@
 // except according to those terms.
 
 use autocxx_parser::file_locations::FileLocationStrategy;
+use autocxx_parser::Defines;
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -82,6 +83,7 @@ pub struct Builder<'a, BuilderContext> {
     custom_gendir: Option<PathBuf>,
     auto_allowlist: bool,
     codegen_options: CodegenOptions<'a>,
+    conditional_inclusion: Defines,
     // This member is to ensure that this type is parameterized
     // by a BuilderContext. The goal is to balance three needs:
     // (1) have most of the functionality over in autocxx_engine,
@@ -117,6 +119,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
             custom_gendir: None,
             auto_allowlist: false,
             codegen_options: CodegenOptions::default(),
+            conditional_inclusion: Defines::default(),
             ctx: PhantomData,
         }
     }
@@ -193,6 +196,12 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         self
     }
 
+    /// Provided defines are used to resolve #ifdef directives inside include_cpp! macro
+    pub fn conditional_inclusion(mut self, defines: Vec<String>) -> Self {
+        self.conditional_inclusion = Defines::new(defines);
+        self
+    }
+
     /// Build autocxx C++ files and return a [`cc::Build`] you can use to build
     /// more from a build.rs file.
     ///
@@ -253,7 +262,7 @@ impl<CTX: BuilderContext> Builder<'_, CTX> {
         let autocxx_inc = build_autocxx_inc(self.autocxx_incs, &incdir);
         gen_location_strategy.set_cargo_env_vars_for_build();
 
-        let mut parsed_file = crate::parse_file(self.rs_file, self.auto_allowlist)
+        let mut parsed_file = self.conditional_inclusion.with_explicit_defines(|_| crate::parse_file(self.rs_file, self.auto_allowlist))
             .map_err(BuilderError::ParseError)?;
         parsed_file
             .resolve_all(
