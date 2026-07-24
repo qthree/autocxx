@@ -156,7 +156,7 @@ dependencies = [
 [[package]]
 name = "autocxx-bindgen"
 version = "0.73.0"
-source = "git+https://github.com/tchebb/rust-bindgen?branch=autocxx-fix-clang-22#14f45fd2c3bee958d6c4b2c20bf81a7080e5ba1d"
+source = "git+https://github.com/qthree/autocxx-bindgen#79e19cde8ece80d2aad589f0e6b3a8afee709061"
 dependencies = [
  "bitflags 2.8.0",
  "cexpr",
