@@ -10,11 +10,11 @@ use std::{cell::RefCell, fmt::Display, panic::UnwindSafe, rc::Rc};
 
 use crate::types::{strip_bindgen_original_suffix, Namespace};
 use crate::{conversion::CppEffectiveName, types::QualifiedName, RebuildDependencyRecorder};
-use autocxx_bindgen::callbacks::Virtualness;
 use autocxx_bindgen::callbacks::{
     DiscoveredItem, DiscoveredItemId, Explicitness, SpecialMemberKind, Visibility,
 };
 use autocxx_bindgen::callbacks::{ItemInfo, ItemKind, ParseCallbacks};
+use autocxx_bindgen::callbacks::{SourceLocation, Virtualness};
 use indexmap::IndexMap as HashMap;
 use indexmap::IndexSet as HashSet;
 use quote::quote;
@@ -311,7 +311,12 @@ impl ParseCallbacks for AutocxxParseCallbacks {
         self.results.borrow_mut().virtuals.insert(id, virtualness);
     }
 
-    fn new_item_found(&self, id: DiscoveredItemId, item: DiscoveredItem) {
+    fn new_item_found(
+        &self,
+        id: DiscoveredItemId,
+        item: DiscoveredItem,
+        _source_location_source_location: Option<&SourceLocation>,
+    ) {
         match item {
             DiscoveredItem::Struct { final_name, .. }
             | DiscoveredItem::Enum { final_name, .. }
